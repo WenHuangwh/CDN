@@ -18,7 +18,7 @@ while getopts ":p:o:n:u:i:" opt; do
 done
 
 # Start DNS server
-ssh -i $keyfile $username@<your_dns_server_ip> "cd ~/cs5700cdn && nohup ./dnsserver -p $port -n $name > /dev/null 2>&1 &"
+ssh -i $keyfile $username@cdn-dns.5700.network "cd ~/cs5700cdn && nohup ./dnsserver -p $port -n $name > /dev/null 2>&1 &"
 
 # Start HTTP server
-ssh -i $keyfile $username@<your_http_server_ip> "cd ~/cs5700cdn && nohup ./httpserver -p $port -o $origin > /dev/null 2>&1 &"
+ssh -i $keyfile $username@cdn-http4.5700.network "cd ~/cs5700cdn && nohup ./httpserver -p $port -o $origin > /dev/null 2>&1 &"

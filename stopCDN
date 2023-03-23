@@ -12,7 +12,7 @@ while getopts ":u:i:" opt; do
 done
 
 # Stop DNS server
-ssh -i $keyfile $username@<your_dns_server_ip> "pkill -f dnsserver"
+ssh -i $keyfile $username@cdn-dns.5700.network "pkill -f dnsserver"
 
 # Stop HTTP server
-ssh -i $keyfile $username@<your_http_server_ip> "pkill -f httpserver"
+ssh -i $keyfile $username@cdn-http4.5700.network "pkill -f httpserver"

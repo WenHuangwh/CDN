@@ -18,9 +18,9 @@ while getopts ":p:o:n:u:i:" opt; do
 done
 
 # Deploy DNS server
-ssh -i $keyfile $username@<your_dns_server_ip> "mkdir -p ~/cs5700cdn"
-scp -i $keyfile ./dnsserver $username@<your_dns_server_ip>:~/cs5700cdn/
+ssh -i $keyfile $username@cdn-dns.5700.network "mkdir -p ~/cs5700cdn"
+scp -i $keyfile ./dnsserver $username@cdn-dns.5700.network:~/cs5700cdn/
 
 # Deploy HTTP server
-ssh -i $keyfile $username@<your_http_server_ip> "mkdir -p ~/cs5700cdn"
-scp -i $keyfile ./httpserver $username@<your_http_server_ip>:~/cs5700cdn/
+ssh -i $keyfile $username@cdn-http4.5700.network "mkdir -p ~/cs5700cdn"
+scp -i $keyfile ./httpserver $username@cdn-http4.5700.network:~/cs5700cdn/
