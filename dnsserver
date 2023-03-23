@@ -1,0 +1,32 @@
+#!/usr/bin/env python3
+import socketserver
+from dnslib import DNSRecord, RR, QTYPE
+
+class MyDNSServer(socketserver.BaseRequestHandler):
+
+    def get_best_replica_ip(self):
+        # Implement your logic for selecting the best replica server IP address
+        best_replica_ip = "192.0.2.1"
+        return best_replica_ip
+
+    def handle(self):
+        data, socket = self.request
+        dns_request = DNSRecord.parse(data)
+
+        dns_response = self.create_dns_response(dns_request)
+        socket.sendto(dns_response.pack(), self.client_address)
+
+    def create_dns_response(self, dns_request):
+        dns_response = DNSRecord(DNSHeader(id=dns_request.header.id, qr=1, aa=1, ra=1), q=dns_request.q)
+
+        for question in dns_request.questions:
+            qtype = QTYPE[question.qtype]
+            if qtype == "A":
+                best_replica_ip = self.get_best_replica_ip()
+                dns_response.add_answer(RR(question.qname, QTYPE.A, rdata=best_replica_ip, ttl=60))
+
+        return dns_response
+
+if __name__ == "__main__":
+    server = socketserver.UDPServer(("0.0.0.0", YOUR_PORT), MyDNSServer)
+    server.serve_forever()
