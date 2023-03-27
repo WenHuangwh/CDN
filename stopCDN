@@ -1,18 +1,22 @@
 #!/bin/bash
 
-while getopts ":u:i:" opt; do
+# Usage: ./stopCDN.sh -p <port> -o <origin> -n <name> -u <username> -i <keyfile>
+
+while getopts ":p:o:n:u:i:" opt; do
   case $opt in
+    p) port="$OPTARG"
+    ;;
+    o) origin="$OPTARG"
+    ;;
+    n) name="$OPTARG"
+    ;;
     u) username="$OPTARG"
     ;;
     i) keyfile="$OPTARG"
     ;;
-    \?) echo "Invalid option -$OPTARG" >&2
-    ;;
   esac
 done
 
-# Stop DNS server
-ssh -i $keyfile $username@cdn-dns.5700.network "pkill -f dnsserver"
-
-# Stop HTTP server
-ssh -i $keyfile $username@cdn-http4.5700.network "pkill -f httpserver"
+# Stop the DNS and HTTP server remotely
+ssh -i "$keyfile" "${username}@cdn-dns.5700.network" "pkill -f 'dnsserver -p $port -n $name'" &
+ssh -i "$keyfile" "${username}@cdn-http4.5700.network" "pkill -f 'httpserver -p $port -o $origin'" &

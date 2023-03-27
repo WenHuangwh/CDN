@@ -1,64 +1,39 @@
 #!/usr/bin/env python3
-import http.server
-import socketserver
-import urllib.request
-from collections import OrderedDict
 
-class LRUCache:
-    def __init__(self, capacity):
-        self.cache = OrderedDict()
-        self.capacity = capacity
+import argparse
+import socket
+import requests
 
-    def get(self, key):
-        if key in self.cache:
-            self.cache.move_to_end(key)
-            return self.cache[key]
-        return None
+CACHE = {}
 
-    def put(self, key, value):
-        if key in self.cache:
-            self.cache.move_to_end(key)
-        self.cache[key] = value
-        if len(self.cache) > self.capacity:
-            self.cache.popitem(last=False)
+def handle_request(request, origin):
+    path = request.split()[1]
+    if path == "/grading/beacon":
+        return b"HTTP/1.1 204 No Content\r\n\r\n"
+    elif path in CACHE:
+        return CACHE[path]
+    else:
+        url = origin + path
+        response = requests.get(url)
+        CACHE[path] = response.content
+        return CACHE[path]
 
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-p', '--port', required=True, help="Port number to bind the HTTP server")
+    parser.add_argument('-o', '--origin', required=True, help="Origin server for the CDN")
+    args = parser.parse_args()
 
-class MyHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
-    cache = LRUCache(capacity=100)
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.bind(("", int(args.port)))
+    sock.listen()
 
-    def do_GET(self):
-        if self.path == "/grading/beacon":
-            self.send_response(204)
-            self.end_headers()
-            return
-
-        cached_content = self.cache.get(self.path)
-        if cached_content:
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html")
-            self.send_header("Content-Length", len(cached_content))
-            self.end_headers()
-            self.wfile.write(cached_content)
-        else:
-            self.fetch_from_origin_and_cache()
-
-    def fetch_from_origin_and_cache(self):
-        origin_url = f"http://cs5700cdnorigin.ccs.neu.edu:8080{self.path}"
-        try:
-            with urllib.request.urlopen(origin_url) as response:
-                content = response.read()
-                self.cache.put(self.path, content)
-
-                self.send_response(response.status)
-                self.send_header("Content-Type", response.headers["Content-Type"])
-                self.send_header("Content-Length", len(content))
-                self.end_headers()
-                self.wfile.write(content)
-        except urllib.error.HTTPError as e:
-            self.send_error(e.code, e.reason)
-        except urllib.error.URLError as e:
-            self.send_error(500, "Failed to fetch content from origin server")
+    while True:
+        conn, addr = sock.accept()
+        data = conn.recv(1024)
+        response = handle_request(data.decode(), args.origin)
+        conn.sendall(response)
+        conn.close()
 
 if __name__ == "__main__":
-    with socketserver.TCPServer(("", YOUR_PORT), MyHTTPRequestHandler) as httpd:
-        httpd.serve_forever()
+    main()
