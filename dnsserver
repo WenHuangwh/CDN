@@ -5,7 +5,7 @@ from dnslib import DNSRecord, DNSHeader, QTYPE, A, RR
 
 DNS_SERVER = "cdn-dns.5700.network"
 HTTP_SERVER = "cdn-http4.5700.network"
-REPLICA = "1.1.1.1"
+REPLICA = "" # ip address of http-server
 CDN_NAME = "cs5700cdn.example.com"
 PORT = None
 
@@ -14,39 +14,40 @@ def handle_query(query):
     response = query.reply()
     qtype = QTYPE[query.q.qtype]
     query_name = str(query.q.qname).rstrip('.')
-    print(query_name)
+    
+    root_server_ip = "198.41.0.4"  # A Root Server IP
 
-    if qtype == "A" and query_name == CDN_NAME:
-        print("mark3")
+    if qtype == "A" and query_name.startswith(CDN_NAME):
+        # If the requested name starts with CDN_NAME, return the replica IP address
         answer = RR(query.q.qname, QTYPE.A, rdata=A(REPLICA), ttl=3600)
-        response.add_answer(answer)
+    else:
+        # Otherwise, return the root server IP address
+        answer = RR(query.q.qname, QTYPE.A, rdata=A(root_server_ip), ttl=3600)
 
+    response.add_answer(answer)
     return response
 
 def main():
+    global REPLICA
 
-    global REPLICA, PORT
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--port', required=True, help="Port number to bind the DNS server")
     parser.add_argument('-n', '--name', required=True, help="CDN-specific name that your server translates to an IP")
     args = parser.parse_args()
 
     PORT = int(args.port)
-    REPLICA = socket.gethostbyname(HTTP_SERVER)
 
-    print("Replica: ")
-    print(REPLICA)
+    REPLICA = socket.gethostbyname(HTTP_SERVER)
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind(("", PORT))
 
     while True:
-        print("mark1")
         data, addr = sock.recvfrom(1024)
-        print("mark2")
         query = DNSRecord.parse(data)
         response = handle_query(query)
         sock.sendto(response.pack(), addr)
+
 
 
 if __name__ == "__main__":

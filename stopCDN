@@ -17,6 +17,16 @@ while getopts ":p:o:n:u:i:" opt; do
   esac
 done
 
+# Send SIGINT to httpserver to trigger cache writing before stopping the process
+ssh -i "$keyfile" "${username}@cdn-http4.5700.network" "pgrep -f 'httpserver -p $port -o $origin' | xargs kill -s SIGINT" &
+
+# Give the httpserver a moment to write the cache
+# sleep 1
+
 # Stop the DNS and HTTP server remotely
-ssh -i "$keyfile" "${username}@cdn-dns.5700.network" "pkill -f 'dnsserver -p $port -n $name'" &
-ssh -i "$keyfile" "${username}@cdn-http4.5700.network" "pkill -f 'httpserver -p $port -o $origin'" &
+ssh_dns_pid=$(ssh -i "$keyfile" "${username}@cdn-dns.5700.network" "pkill -f 'dnsserver -p $port -n $name'" &)
+ssh_http_pid=$(ssh -i "$keyfile" "${username}@cdn-http4.5700.network" "pkill -f 'httpserver -p $port -o $origin'" &)
+
+# Wait for both SSH commands to complete
+wait $ssh_dns_pid
+wait $ssh_http_pid

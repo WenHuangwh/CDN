@@ -1,21 +1,85 @@
 #!/usr/bin/env python3
-
+import http.client
 import argparse
 import socket
-import requests
+import os
+import time
+import signal
+import pickle
+import threading
+import sys
+from collections import OrderedDict
+from functools import reduce
 
-CACHE = {}
+
+CACHE_FILENAME = "cache.bin"
+CACHE = OrderedDict()
+CACHE_SIZE_LIMIT = 20 * 1024 * 1024
+
+def write_log(log_entry):
+    with open("log.txt", "a") as log_file:
+        log_file.write(log_entry + "\n")
+
+def read_cache():
+    if os.path.exists(CACHE_FILENAME):
+        with open(CACHE_FILENAME, 'rb') as cache_file:
+            return pickle.load(cache_file)
+    return OrderedDict()
+
+def write_cache(cache):
+    with open(CACHE_FILENAME, 'wb') as cache_file:
+        pickle.dump(cache, cache_file)
+
+def cache_size():
+    return reduce(lambda total_size, item: total_size + len(item), CACHE.values(), 0)
+
+def maintain_cache_size(max_cache_size = CACHE_SIZE_LIMIT):
+    while cache_size() > max_cache_size:
+        removed_item = CACHE.popitem(last=False)
+        write_log(f"Removed from cache due to size limit: {removed_item[0]}")
+
+def cache_write_periodically(interval):
+    while True:
+        time.sleep(interval)
+        write_cache(CACHE)
+
+def signal_handler(sig, frame):
+    print('Writing cache to file before shutting down...')
+    write_cache(CACHE)
+    sys.exit(0)
 
 def handle_request(request, origin):
     path = request.split()[1]
+
     if path == "/grading/beacon":
         return b"HTTP/1.1 204 No Content\r\n\r\n"
     elif path in CACHE:
+        write_log(f"Getting from cache: {path}")
         return CACHE[path]
     else:
-        url = 'http://' + origin + path
-        response = requests.get(url)
-        CACHE[path] = response.content
+        write_log(f"Getting from origin: {path}")
+        conn = http.client.HTTPConnection(origin)
+        conn.request("GET", path)
+        response = conn.getresponse()
+
+        response_headers = response.getheaders()
+        response_content = response.read()
+
+        response_bytes = bytearray()
+        response_line = f"HTTP/1.1 {response.status} {response.reason}\r\n"
+        response_bytes.extend(response_line.encode())
+
+        for header, value in response_headers:
+            header_line = f"{header}: {value}\r\n"
+            response_bytes.extend(header_line.encode())
+
+        response_bytes.extend(b"\r\n")
+        response_bytes.extend(response_content)
+
+        # Maintain cache size within the limit
+        maintain_cache_size()
+
+        CACHE[path] = bytes(response_bytes)
         return CACHE[path]
 
 def main():
@@ -24,9 +88,22 @@ def main():
     parser.add_argument('-o', '--origin', required=True, help="Origin server for the CDN")
     args = parser.parse_args()
 
+    # Load cache from file
+    CACHE = read_cache()
+
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.bind(("", int(args.port)))
     sock.listen()
+
+    print("http server starts to listening")
+
+    # Register signal handler to write cache on server shutdown
+    signal.signal(signal.SIGINT, signal_handler)
+
+    # Start a separate thread to periodically write the cache to a file
+    cache_write_thread = threading.Thread(target=cache_write_periodically, args=(300,))
+    cache_write_thread.daemon = True
+    cache_write_thread.start()
 
     while True:
         conn, addr = sock.accept()
