@@ -13,7 +13,7 @@ def handle_request(request, origin):
     elif path in CACHE:
         return CACHE[path]
     else:
-        url = origin + path
+        url = 'http://' + origin + path
         response = requests.get(url)
         CACHE[path] = response.content
         return CACHE[path]
