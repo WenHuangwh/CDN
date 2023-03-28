@@ -27,6 +27,7 @@ def handle_query(query):
     response.add_answer(answer)
     return response
 
+
 def main():
     global REPLICA
 
