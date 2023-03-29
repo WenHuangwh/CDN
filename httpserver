@@ -11,43 +11,51 @@ import sys
 from collections import OrderedDict
 from functools import reduce
 
-
+# Use a binary file to save the cache
 CACHE_FILENAME = "cache.bin"
 CACHE = OrderedDict()
-CACHE_SIZE_LIMIT = 20 * 1024 * 1024
+CACHE_SIZE_LIMIT = 20 * 1024 * 1024  # 20 MB
 
+# Function to write log entries to a file
 def write_log(log_entry):
     with open("log.txt", "a") as log_file:
         log_file.write(log_entry + "\n")
 
+# Function to read the cache from the disk
 def read_cache():
     if os.path.exists(CACHE_FILENAME):
         with open(CACHE_FILENAME, 'rb') as cache_file:
             return pickle.load(cache_file)
     return OrderedDict()
 
+# Function to write the cache to the disk
 def write_cache(cache):
     with open(CACHE_FILENAME, 'wb') as cache_file:
         pickle.dump(cache, cache_file)
 
+# Function to calculate the total size of the cache
 def cache_size():
     return reduce(lambda total_size, item: total_size + len(item), CACHE.values(), 0)
 
+# Function to maintain the cache size within the specified limit
 def maintain_cache_size(max_cache_size = CACHE_SIZE_LIMIT):
     while cache_size() > max_cache_size:
         removed_item = CACHE.popitem(last=False)
         write_log(f"Removed from cache due to size limit: {removed_item[0]}")
 
+# Function to periodically write the cache to disk
 def cache_write_periodically(interval):
     while True:
         time.sleep(interval)
         write_cache(CACHE)
 
+# Function to handle the server shutdown gracefully
 def signal_handler(sig, frame):
     print('Writing cache to file before shutting down...')
     write_cache(CACHE)
     sys.exit(0)
 
+# Function to handle incoming HTTP requests and return the appropriate response
 def handle_request(request, origin):
     path = request.split()[1]
 
@@ -83,6 +91,7 @@ def handle_request(request, origin):
         return CACHE[path]
 
 def main():
+    # Parse command line arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--port', required=True, help="Port number to bind the HTTP server")
     parser.add_argument('-o', '--origin', required=True, help="Origin server for the CDN")
@@ -91,6 +100,7 @@ def main():
     # Load cache from file
     CACHE = read_cache()
 
+    # Set up the socket for the HTTP server
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.bind(("", int(args.port)))
     sock.listen()
