@@ -13,7 +13,7 @@ Challenges:
 
 
 Collaboration:
-1. Xiaoya implemented the DNS server, including handling queries and sending appropriate responses.
+1. Xiaoyao implemented the DNS server, including handling queries and sending appropriate responses.
 
 2. Wen implemented the HTTP server, including the content retrival.
 
