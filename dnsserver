@@ -3,6 +3,7 @@ import argparse
 import socket
 from dnslib import DNSRecord, DNSHeader, QTYPE, A, RR
 
+# Server addresses and settings
 DNS_SERVER = "cdn-dns.5700.network"
 HTTP_SERVER = "cdn-http4.5700.network"
 REPLICA = "" # ip address of http-server
@@ -10,20 +11,21 @@ CDN_NAME = "cs5700cdn.example.com"
 PORT = None
 
 def handle_query(query):
-    
+    # Create a response to the DNS query
     response = query.reply()
     qtype = QTYPE[query.q.qtype]
     query_name = str(query.q.qname).rstrip('.')
     
     root_server_ip = "198.41.0.4"  # A Root Server IP
-
+    # Check if the requested domain name starts with CDN_NAME
     if qtype == "A" and query_name.startswith(CDN_NAME):
-        # If the requested name starts with CDN_NAME, return the replica IP address
+        # Return the replica IP address as the answer
         answer = RR(query.q.qname, QTYPE.A, rdata=A(REPLICA), ttl=3600)
     else:
         # Otherwise, return the root server IP address
         answer = RR(query.q.qname, QTYPE.A, rdata=A(root_server_ip), ttl=3600)
 
+    # Add the answer to the response
     response.add_answer(answer)
     return response
 
@@ -31,25 +33,28 @@ def handle_query(query):
 def main():
     global REPLICA
 
+    # Parse command line arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--port', required=True, help="Port number to bind the DNS server")
     parser.add_argument('-n', '--name', required=True, help="CDN-specific name that your server translates to an IP")
     args = parser.parse_args()
 
+    # Set the port number for the DNS server
     PORT = int(args.port)
 
+    # Get the IP address of the HTTP server
     REPLICA = socket.gethostbyname(HTTP_SERVER)
 
+    # Create a socket for the DNS server
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     sock.bind(("", PORT))
 
+    # Main loop to receive DNS queries and send responses
     while True:
         data, addr = sock.recvfrom(1024)
         query = DNSRecord.parse(data)
         response = handle_query(query)
         sock.sendto(response.pack(), addr)
-
-
 
 if __name__ == "__main__":
     main()
