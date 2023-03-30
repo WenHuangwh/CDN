@@ -61,9 +61,12 @@ def handle_request(request, origin):
 
     if path == "/grading/beacon":
         return b"HTTP/1.1 204 No Content\r\n\r\n"
+    # Have records in cache
     elif path in CACHE:
         write_log(f"Getting from cache: {path}")
         return CACHE[path]
+    # otherwise retrieve from origin
+    # for invalid path, origin will respond with a 404
     else:
         write_log(f"Getting from origin: {path}")
         conn = http.client.HTTPConnection(origin)
