@@ -11,6 +11,9 @@ Hight-level approach:
 Challenges:
 1. Logging in to the cloud node using the SSH key. Firstly, we needed to generate an SSH key pair and submit the public key to the system administrator to gain access to the cloud nodes. Secondly, We had to add the private key to the SSH agent on our local machine to manage the keys securely and simplify the authentication process. Finally, we had to use the correct port number and username to log in to the cloud nodes. This involved learning how to properly configure the SSH client and troubleshoot issues related to permissions and connectivity in order to establish a secure connection to the cloud nodes.
 
+2.The second challenge we faced was understanding the entire processing logic of the client. At the beginning, we were quite confused about what the input and output of the two servers looked like, as well as how the output of the dnsserver was passed on to the httpserver. Ultimately, we decided to write a client myself to better understand the servers from the perspective of the client.
+
+3.Implementing cache management in the HTTP server, including periodical cache writing to a file and constraining the cache size to 20MB. Also, we implemented a signal handler in the HTTP server to ensure that the cache is written to a file when the server is stopped, and incorporating this into the stop script.
 
 Collaboration:
 1. Xiaoyao implemented the DNS server, including handling queries and sending appropriate responses.
