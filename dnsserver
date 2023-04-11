@@ -2,13 +2,51 @@
 import argparse
 import socket
 from dnslib import DNSRecord, DNSHeader, QTYPE, A, RR
+import time
+import subprocess
+import threading
 
 # Server addresses and settings
 DNS_SERVER = "cdn-dns.5700.network"
 HTTP_SERVER = "cdn-http4.5700.network"
-REPLICA = "" # ip address of http-server
+REPLICA_SERVERS = [
+    "cdn-http1.5700.network",
+    "cdn-http2.5700.network",
+    "cdn-http3.5700.network",
+    "cdn-http5.5700.network",
+    "cdn-http6.5700.network",
+    "cdn-http7.5700.network",
+]
+# Dictionary to store performance metrics
+REPLICA_METRICS = {server: float('inf') for server in REPLICA_SERVERS}
 CDN_NAME = "cs5700cdn.example.com"
 PORT = None
+
+# Function to run Scamper for each replica server
+def update_replica_metrics():
+    while True:
+        for server in REPLICA_SERVERS:
+            # Get the IP address of the replica server
+            ip = socket.gethostbyname(server)
+            
+            # Run Scamper to measure latency
+            result = subprocess.run(
+                ["scamper", "-c", "ping -c 1", "-i", ip],
+                stdout=subprocess.PIPE,
+                text=True
+            )
+            
+            # Parse the Scamper output to extract the latency value
+            lines = result.stdout.splitlines()
+            for line in lines:
+                if line.startswith("icmp_seq=0"):
+                    latency = float(line.split()[-2])
+                    REPLICA_METRICS[server] = latency
+                    break
+                    
+        # Sleep for a while before updating the metrics again
+        time.sleep(60)
+
 
 def handle_query(query):
     # Create a response to the DNS query
@@ -19,8 +57,15 @@ def handle_query(query):
     root_server_ip = "198.41.0.4"  # A Root Server IP
     # Check if the requested domain name starts with CDN_NAME
     if qtype == "A" and query_name.startswith(CDN_NAME):
+        # Choose the replica server with the lowest latency
+        best_replica = min(REPLICA_METRICS, key=REPLICA_METRICS.get)
+        best_replica_ip = socket.gethostbyname(best_replica)
+
+        # Add this print statement
+        print(f"Latencies: {REPLICA_METRICS}, Best replica: {best_replica} ({best_replica_ip})")
+
         # Return the replica IP address as the answer
-        answer = RR(query.q.qname, QTYPE.A, rdata=A(REPLICA), ttl=3600)
+        answer = RR(query.q.qname, QTYPE.A, rdata=A(best_replica_ip), ttl=3600)
     else:
         # Otherwise, return the root server IP address
         answer = RR(query.q.qname, QTYPE.A, rdata=A(root_server_ip), ttl=3600)
@@ -29,6 +74,10 @@ def handle_query(query):
     response.add_answer(answer)
     return response
 
+# Start a separate thread that runs the update_replica_metrics function
+update_thread = threading.Thread(target=update_replica_metrics)
+update_thread.daemon = True
+update_thread.start()
 
 def main():
     global REPLICA
