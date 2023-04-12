@@ -12,7 +12,7 @@ REPLICA_SERVERS = [
     "cdn-http1.5700.network",
     "cdn-http2.5700.network",
     "cdn-http3.5700.network",
-    "cdn-http4.5700.network"
+    "cdn-http4.5700.network",
     "cdn-http5.5700.network",
     "cdn-http6.5700.network",
     "cdn-http7.5700.network",
@@ -64,9 +64,6 @@ def handle_query(query):
         best_replica = min(REPLICA_METRICS, key=REPLICA_METRICS.get)
         best_replica_ip = socket.gethostbyname(best_replica)
 
-        # Add this print statement
-        print(f"Latencies: {REPLICA_METRICS}, Best replica: {best_replica} ({best_replica_ip})")
-
         # Return the replica IP address as the answer
         answer = RR(query.q.qname, QTYPE.A, rdata=A(best_replica_ip), ttl=3600)
     else:
@@ -96,7 +93,6 @@ def save_scamper_output(server, output):
         log_file.write("\n")
 
 
-
 def main():
     global REPLICA
 
@@ -108,9 +104,6 @@ def main():
 
     # Set the port number for the DNS server
     PORT = int(args.port)
-
-    # Get the IP address of the HTTP server
-    REPLICA = socket.gethostbyname(HTTP_SERVER)
 
     # Create a socket for the DNS server
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
