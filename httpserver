@@ -2,24 +2,34 @@
 import http.client
 import argparse
 import socket
-import os
 import time
-import signal
-import pickle
-import threading
-import sys
 from collections import OrderedDict
 from functools import reduce
 
-CACHE = {}
-# Function to write log entries to a file
+class LRUCache:
+    def __init__(self, capacity):
+        self.cache = OrderedDict()
+        self.capacity = capacity
+    
+    def get(self, key):
+        if key not in self.cache:
+            return None
+        value = self.cache.pop(key)
+        self.cache[key] = value
+        return value
+    
+    def put(self, key, value):
+        if key in self.cache:
+            self.cache.pop(key)
+        elif len(self.cache) >= self.capacity:
+            self.cache.popitem(last=False)
+        self.cache[key] = value
+
 def write_log(log_entry):
     with open("log.txt", "a") as log_file:
         log_file.write(log_entry + "\n")
 
-
-# Function to handle incoming HTTP requests and return the appropriate response
-def handle_request(request, origin):
+def handle_request(request, origin, cache):
     request_parts = request.split()
     if len(request_parts) < 2:
         return b"HTTP/1.1 400 Bad Request\r\n\r\n"
@@ -29,9 +39,9 @@ def handle_request(request, origin):
     if path == "/grading/beacon":
         return b"HTTP/1.1 204 No Content\r\n\r\n"
     # Have records in cache
-    elif path in CACHE:
+    elif (cached_response := cache.get(path)) is not None:
         write_log(f"Getting from cache: {path}")
-        return CACHE[path]
+        return cached_response
     # otherwise retrieve from origin
     # for invalid path, origin will respond with a 404
     else:
@@ -66,10 +76,12 @@ def handle_request(request, origin):
         # Log the time taken to get the website from the origin server
         write_log(f"Time taken to get {path} from origin: {time_taken:.4f} seconds")
         
+        # Cache the response
+        cache.put(path, bytes(response_bytes))
+
         return bytes(response_bytes)
 
 def main():
-    # Parse command line arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--port', required=True, help="Port number to bind the HTTP server")
     parser.add_argument('-o', '--origin', required=True, help="Origin server for the CDN")
@@ -80,14 +92,4 @@ def main():
     sock.bind(("", int(args.port)))
     sock.listen()
 
-    print("http server starts to listening")
-
-    while True:
-        conn, addr = sock.accept()
-        data = conn.recv(1024)
-        response = handle_request(data.decode(), args.origin)
-        conn.sendall(response)
-        conn.close()
-
-if __name__ == "__main__":
-    main()
+    # Create an instance of the LR
