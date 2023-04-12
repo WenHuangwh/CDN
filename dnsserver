@@ -2,59 +2,93 @@
 import argparse
 import socket
 from dnslib import DNSRecord, DNSHeader, QTYPE, A, RR
+import time
+import subprocess
+import threading
 
-# Server addresses and settings
-DNS_SERVER = "cdn-dns.5700.network"
-HTTP_SERVER = "cdn-http4.5700.network"
-REPLICA = "" # ip address of http-server
-CDN_NAME = "cs5700cdn.example.com"
-PORT = None
+class ReplicaManager:
+    def __init__(self, replica_servers):
+        self.replica_servers = replica_servers
+        self.client_replica_map = {}
 
-def handle_query(query):
-    # Create a response to the DNS query
-    response = query.reply()
-    qtype = QTYPE[query.q.qtype]
-    query_name = str(query.q.qname).rstrip('.')
-    
-    root_server_ip = "198.41.0.4"  # A Root Server IP
-    # Check if the requested domain name starts with CDN_NAME
-    if qtype == "A" and query_name.startswith(CDN_NAME):
-        # Return the replica IP address as the answer
-        answer = RR(query.q.qname, QTYPE.A, rdata=A(REPLICA), ttl=3600)
-    else:
-        # Otherwise, return the root server IP address
-        answer = RR(query.q.qname, QTYPE.A, rdata=A(root_server_ip), ttl=3600)
+    def measure_latency(self, client_ip, server):
+        ip = socket.gethostbyname(server)
+        result = subprocess.run(
+            ["scamper", "-c", f"ping -c 1 -s {client_ip}", "-i", ip],
+            stdout=subprocess.PIPE,
+            text=True
+        )
 
-    # Add the answer to the response
-    response.add_answer(answer)
-    return response
+        lines = result.stdout.splitlines()
+        for line in lines:
+            if line.startswith("icmp_seq=0"):
+                latency = float(line.split()[-2])
+                return latency
+        return float('inf')
 
+    def get_best_replica(self, client_ip):
+        if client_ip not in self.client_replica_map:
+            latencies = {
+                server: self.measure_latency(client_ip, server) for server in self.replica_servers
+            }
+            best_replica = min(latencies, key=latencies.get)
+            self.client_replica_map[client_ip] = best_replica
+        return self.client_replica_map[client_ip]
+
+class DNSServer:
+    def __init__(self, port, cdn_name, replica_manager):
+        self.port = port
+        self.cdn_name = cdn_name
+        self.replica_manager = replica_manager
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.bind(("", self.port))
+
+    def handle_query(self, query, client_addr):
+        response = query.reply()
+        qtype = QTYPE[query.q.qtype]
+        query_name = str(query.q.qname).rstrip('.')
+        root_server_ip = "198.41.0.4"
+
+        if qtype == "A" and query_name.startswith(self.cdn_name):
+            client_ip = client_addr[0]
+            best_replica = self.replica_manager.get_best_replica(client_ip)
+            best_replica_ip = socket.gethostbyname(best_replica)
+            answer = RR(query.q.qname, QTYPE.A, rdata=A(best_replica_ip), ttl=3600)
+        else:
+            answer = RR(query.q.qname, QTYPE.A, rdata=A(root_server_ip), ttl=3600)
+
+        response.add_answer(answer)
+        return response
+
+    def run(self):
+        while True:
+            data, addr = self.sock.recvfrom(1024)
+            query = DNSRecord.parse(data)
+            response = self.handle_query(query, addr)
+            self.sock.sendto(response.pack(), addr)
 
 def main():
-    global REPLICA
-
-    # Parse command line arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--port', required=True, help="Port number to bind the DNS server")
     parser.add_argument('-n', '--name', required=True, help="CDN-specific name that your server translates to an IP")
     args = parser.parse_args()
 
-    # Set the port number for the DNS server
-    PORT = int(args.port)
+    port = int(args.port)
+    cdn_name = args.name
 
-    # Get the IP address of the HTTP server
-    REPLICA = socket.gethostbyname(HTTP_SERVER)
+    replica_servers =[
+        "cdn-http1.5700.network",
+        "cdn-http2.5700.network",
+        "cdn-http3.5700.network",
+        "cdn-http4.5700.network",
+        "cdn-http5.5700.network",
+        "cdn-http6.5700.network",
+        "cdn-http7.5700.network",
+    ]
 
-    # Create a socket for the DNS server
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind(("", PORT))
-
-    # Main loop to receive DNS queries and send responses
-    while True:
-        data, addr = sock.recvfrom(1024)
-        query = DNSRecord.parse(data)
-        response = handle_query(query)
-        sock.sendto(response.pack(), addr)
+    replica_manager = ReplicaManager(replica_servers)
+    dns_server = DNSServer(port, cdn_name, replica_manager)
+    dns_server.run()
 
 if __name__ == "__main__":
     main()

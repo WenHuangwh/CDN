@@ -11,53 +11,20 @@ import sys
 from collections import OrderedDict
 from functools import reduce
 
-# Use a binary file to save the cache
-CACHE_FILENAME = "cache.bin"
-CACHE = OrderedDict()
-CACHE_SIZE_LIMIT = 20 * 1024 * 1024  # 20 MB
-
+CACHE = {}
 # Function to write log entries to a file
 def write_log(log_entry):
     with open("log.txt", "a") as log_file:
         log_file.write(log_entry + "\n")
 
-# Function to read the cache from the disk
-def read_cache():
-    if os.path.exists(CACHE_FILENAME):
-        with open(CACHE_FILENAME, 'rb') as cache_file:
-            return pickle.load(cache_file)
-    return OrderedDict()
-
-# Function to write the cache to the disk
-def write_cache(cache):
-    with open(CACHE_FILENAME, 'wb') as cache_file:
-        pickle.dump(cache, cache_file)
-
-# Function to calculate the total size of the cache
-def cache_size():
-    return reduce(lambda total_size, item: total_size + len(item), CACHE.values(), 0)
-
-# Function to maintain the cache size within the specified limit
-def maintain_cache_size(max_cache_size = CACHE_SIZE_LIMIT):
-    while cache_size() > max_cache_size:
-        removed_item = CACHE.popitem(last=False)
-        write_log(f"Removed from cache due to size limit: {removed_item[0]}")
-
-# Function to periodically write the cache to disk
-def cache_write_periodically(interval):
-    while True:
-        time.sleep(interval)
-        write_cache(CACHE)
-
-# Function to handle the server shutdown gracefully
-def signal_handler(sig, frame):
-    print('Writing cache to file before shutting down...')
-    write_cache(CACHE)
-    sys.exit(0)
 
 # Function to handle incoming HTTP requests and return the appropriate response
 def handle_request(request, origin):
-    path = request.split()[1]
+    request_parts = request.split()
+    if len(request_parts) < 2:
+        return b"HTTP/1.1 400 Bad Request\r\n\r\n"
+    
+    path = request_parts[1]
 
     if path == "/grading/beacon":
         return b"HTTP/1.1 204 No Content\r\n\r\n"
@@ -70,8 +37,17 @@ def handle_request(request, origin):
     else:
         write_log(f"Getting from origin: {path}")
         conn = http.client.HTTPConnection(origin)
-        conn.request("GET", path)
+        # Start the timer
+        start_time = time.time()
+        # Add the Host header to the request
+        headers = {"Host": origin}
+        conn.request("GET", path, headers=headers)
+        
         response = conn.getresponse()
+        
+        # End the timer and calculate the time taken
+        end_time = time.time()
+        time_taken = end_time - start_time
 
         response_headers = response.getheaders()
         response_content = response.read()
@@ -87,11 +63,10 @@ def handle_request(request, origin):
         response_bytes.extend(b"\r\n")
         response_bytes.extend(response_content)
 
-        # Maintain cache size within the limit
-        maintain_cache_size()
-
-        CACHE[path] = bytes(response_bytes)
-        return CACHE[path]
+        # Log the time taken to get the website from the origin server
+        write_log(f"Time taken to get {path} from origin: {time_taken:.4f} seconds")
+        
+        return bytes(response_bytes)
 
 def main():
     # Parse command line arguments
@@ -100,23 +75,12 @@ def main():
     parser.add_argument('-o', '--origin', required=True, help="Origin server for the CDN")
     args = parser.parse_args()
 
-    # Load cache from file
-    CACHE = read_cache()
-
     # Set up the socket for the HTTP server
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.bind(("", int(args.port)))
     sock.listen()
 
     print("http server starts to listening")
-
-    # Register signal handler to write cache on server shutdown
-    signal.signal(signal.SIGINT, signal_handler)
-
-    # Start a separate thread to periodically write the cache to a file
-    cache_write_thread = threading.Thread(target=cache_write_periodically, args=(300,))
-    cache_write_thread.daemon = True
-    cache_write_thread.start()
 
     while True:
         conn, addr = sock.accept()
