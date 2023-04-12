@@ -2,9 +2,8 @@
 import argparse
 import socket
 from dnslib import DNSRecord, DNSHeader, QTYPE, A, RR
-import time
 import subprocess
-import threading
+import logging
 
 class ReplicaManager:
     def __init__(self, replica_servers):
@@ -33,6 +32,15 @@ class ReplicaManager:
             }
             best_replica = min(latencies, key=latencies.get)
             self.client_replica_map[client_ip] = best_replica
+
+            # Log the latencies for each replica
+            logging.info(f"Client IP: {client_ip}")
+            for server, latency in latencies.items():
+                logging.info(f"Latency for {server}: {latency} ms")
+
+            # Log the selected best replica
+            logging.info(f"Selected best replica: {best_replica}")
+
         return self.client_replica_map[client_ip]
 
 class DNSServer:
@@ -66,6 +74,10 @@ class DNSServer:
             query = DNSRecord.parse(data)
             response = self.handle_query(query, addr)
             self.sock.sendto(response.pack(), addr)
+
+    # Configure logging
+    logging.basicConfig(filename="replica_map.log", level=logging.INFO, format="%(asctime)s - %(message)s")
+
 
 def main():
     parser = argparse.ArgumentParser()
