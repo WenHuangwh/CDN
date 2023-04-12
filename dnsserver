@@ -8,11 +8,11 @@ import threading
 
 # Server addresses and settings
 DNS_SERVER = "cdn-dns.5700.network"
-HTTP_SERVER = "cdn-http4.5700.network"
 REPLICA_SERVERS = [
     "cdn-http1.5700.network",
     "cdn-http2.5700.network",
     "cdn-http3.5700.network",
+    "cdn-http4.5700.network"
     "cdn-http5.5700.network",
     "cdn-http6.5700.network",
     "cdn-http7.5700.network",
@@ -35,7 +35,10 @@ def update_replica_metrics():
                 stdout=subprocess.PIPE,
                 text=True
             )
-            
+
+            # Save the Scamper output to a log file
+            save_scamper_output(server, result.stdout)
+
             # Parse the Scamper output to extract the latency value
             lines = result.stdout.splitlines()
             for line in lines:
@@ -85,6 +88,13 @@ def save_latency_data_periodically(metrics, filename, interval):
         with open(filename, 'w') as f:
             for replica, latency in metrics.items():
                 f.write(f"{replica}: {latency}\n")
+
+def save_scamper_output(server, output):
+    with open(f"{server}_scamper.log", 'a') as log_file:
+        log_file.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+        log_file.write(output)
+        log_file.write("\n")
+
 
 
 def main():
