@@ -4,11 +4,23 @@ import socket
 from dnslib import DNSRecord, DNSHeader, QTYPE, A, RR
 import subprocess
 import logging
+import time
+
+# Configure logging
+logging.basicConfig(filename="replica_map.log", level=logging.INFO, format="%(asctime)s - %(message)s")
+
 
 class ReplicaManager:
     def __init__(self, replica_servers):
         self.replica_servers = replica_servers
         self.client_replica_map = {}
+
+    def save_scamper_output(self, server, output):
+        with open("all_servers_scamper.log", 'a') as log_file:
+            log_file.write(f"Server: {server}\n")
+            log_file.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            log_file.write(output)
+            log_file.write("\n")
 
     def measure_latency(self, client_ip, server):
         ip = socket.gethostbyname(server)
@@ -18,12 +30,17 @@ class ReplicaManager:
             text=True
         )
 
+        logging.debug(f"Scamper result for server {server}:")
+        logging.debug(result.stdout)
+
         lines = result.stdout.splitlines()
         for line in lines:
             if line.startswith("icmp_seq=0"):
                 latency = float(line.split()[-2])
-                return latency
-        return float('inf')
+                logging.debug(f"Latency for server {server}: {latency} ms")
+                return latency  
+        logging.warning(f"No latency found for server {server}, returning infinity")
+        return float('inf')    
 
     def get_best_replica(self, client_ip):
         if client_ip not in self.client_replica_map:
@@ -52,6 +69,7 @@ class DNSServer:
         self.sock.bind(("", self.port))
 
     def handle_query(self, query, client_addr):
+        logging.debug(f"Received query from {client_addr}: {query}")
         response = query.reply()
         qtype = QTYPE[query.q.qtype]
         query_name = str(query.q.qname).rstrip('.')
@@ -74,10 +92,6 @@ class DNSServer:
             query = DNSRecord.parse(data)
             response = self.handle_query(query, addr)
             self.sock.sendto(response.pack(), addr)
-
-    # Configure logging
-    logging.basicConfig(filename="replica_map.log", level=logging.INFO, format="%(asctime)s - %(message)s")
-
 
 def main():
     parser = argparse.ArgumentParser()
