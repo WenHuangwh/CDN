@@ -14,6 +14,7 @@ http_servers=(
 
 dnsserver_file="dnsserver"
 httpserver_file="httpserver"
+weblist_file="websites.txt"
 
 while getopts ":p:o:n:u:i:" opt; do
   case $opt in
@@ -34,5 +35,10 @@ done
 scp -i "$keyfile" ${dnsserver_file} "${username}@${dns_server}:"
 
 for http_server in "${http_servers[@]}"; do
+  # Clear the cache file on each HTTP server
+  ssh -i "$keyfile" "${username}@${http_server}" "rm -f cache"
+  # Copy htter server
   scp -i "$keyfile" ${httpserver_file} "${username}@${http_server}:"
+  # Copy website list
+  scp -i "$keyfile" "${weblist_file}" "${username}@${http_server}:${weblist_file}"
 done
