@@ -12,6 +12,9 @@ http_servers=(
              "cdn-http7.5700.network"
              )
 
+dnsserver_file="dnsserver"
+httpserver_file="httpserver"
+
 while getopts ":p:o:n:u:i:" opt; do
   case $opt in
     p) port="$OPTARG"

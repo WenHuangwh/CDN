@@ -6,43 +6,43 @@ import subprocess
 import logging
 import time
 
+
 class ReplicaManager:
     def __init__(self, replica_servers):
         self.replica_servers = replica_servers
         self.client_replica_map = {}
 
-    def log_latency(self, server, latency):
-        with open("latency.log", 'a') as log_file:
-            log_file.write(f"Server: {server}\n")
-            log_file.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
-            log_file.write(f"Latency: {latency} ms\n")
-            log_file.write("\n")
-
-    def measure_latency(self, client_ip, server):
-        ip = socket.gethostbyname(server)
-        result = subprocess.run(
-            ["scamper", "-c", f"ping -c 1 -s {client_ip}", "-i", ip],
-            stdout=subprocess.PIPE,
-            text=True
-        )
-        lines = result.stdout.splitlines()
-        for line in lines:
-            if line.startswith("icmp_seq=0"):
-                latency = float(line.split()[-2])
-                logging.debug(f"Latency for server {server}: {latency} ms")
-                self.log_latency(server, latency)
-                return latency  
-        return float('inf')    
+    def measure_latency(self, server, client_ip, latency_port = 20022):
+        # Connect to the HTTP server's latency measurement port
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.connect((server, latency_port))
+            sock.sendall(client_ip.encode())
+            latency = float(sock.recv(1024).decode())
+            return latency
 
     def get_best_replica(self, client_ip):
         if client_ip not in self.client_replica_map:
-            latencies = {
-                server: self.measure_latency(client_ip, server) for server in self.replica_servers
-            }
+            latencies = {}
+            for server in self.replica_servers:
+                try:
+                    latency = self.measure_latency(server, client_ip)
+                    latencies[server] = latency
+                    self.save_scamper_output(server, latency)
+                except Exception as e:
+                    print(f"Error measuring latency for server {server}: {e}")
+                    continue
+            
             best_replica = min(latencies, key=latencies.get)
             self.client_replica_map[client_ip] = best_replica
 
         return self.client_replica_map[client_ip]
+
+    def save_scamper_output(self, server, output):
+        with open("all_servers_scamper.log", 'a') as log_file:
+            log_file.write(f"Server: {server}\n")
+            log_file.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            log_file.write(output)
+            log_file.write("\n")
 
 
 class DNSServer:

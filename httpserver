@@ -12,8 +12,30 @@ import sys
 from collections import OrderedDict
 from functools import reduce
 import gzip
+import subprocess
 
 cache_filename = "cache"
+
+def measure_latency_to_client(client_ip):
+    result = subprocess.run(
+        ["scamper", "-c", f"ping -c 1", "-i", client_ip],
+        stdout=subprocess.PIPE,
+        text=True
+    )
+    write_log("measure latenct")
+    write_log(result.stdout)
+    lines = result.stdout.splitlines()
+    for line in lines:
+        write_log(line)
+        if line.startswith("icmp_seq=0"):
+            latency = float(line.split()[-2])
+            return latency
+    return float('inf')
+
+def handle_latency_request(conn, addr):
+    client_ip = conn.recv(1024).decode()
+    latency = measure_latency_to_client(client_ip)
+    conn.sendall(str(latency).encode())
 
 def setupCache(origin, max_cache_size=20 * 1024 * 1024):
     cache = None
@@ -55,7 +77,6 @@ def prepare_cache(origin, max_cache_size=20 * 1024 * 1024):
         response = requests.get(url)
 
         if response.status_code == 200:
-            write_log(url)
             content = response.content
             content_size = len(content)
 
@@ -128,6 +149,15 @@ def main():
     parser.add_argument('-p', '--port', required=True, help="Port number to bind the HTTP server")
     parser.add_argument('-o', '--origin', required=True, help="Origin server for the CDN")
     args = parser.parse_args()
+
+    latency_port = 20022
+    # Set up a socket for latency measurement requests from DNS server
+    latency_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    latency_sock.bind(("", latency_port))
+    latency_sock.listen()
+
+    # Start a new thread to handle latency measurement requests
+    threading.Thread(target=lambda: handle_latency_request(*latency_sock.accept())).start()
 
     # Set up the socket for the HTTP server
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
