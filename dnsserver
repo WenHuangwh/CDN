@@ -8,6 +8,10 @@ import time
 import json
 import threading
 
+ROOT_SERVICE = "198.41.0.4"
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+
 class ReplicaManager:
     def __init__(self, replica_servers):
         self.replica_servers = replica_servers
@@ -72,6 +76,10 @@ class ReplicaManager:
             best_replica = min(latencies, key=latencies.get)
             self.client_replica_map[client_ip] = best_replica
             self.save_map_cache()
+            with open("log.txt", "a") as log_file:
+                log_file.write("Test map:" + "\n")
+                log_file.write(client_ip + "\n")
+                log_file.write(self.client_replica_map[client_ip] + "\n")
 
         return self.client_replica_map[client_ip]
 
@@ -85,19 +93,17 @@ class DNSServer:
         self.sock.bind(("", self.port))
 
     def handle_query(self, query, client_addr):
-        logging.debug(f"Received query from {client_addr}: {query}")
         response = query.reply()
         qtype = QTYPE[query.q.qtype]
         query_name = str(query.q.qname).rstrip('.')
-        root_server_ip = "198.41.0.4"
-
+        
         if qtype == "A" and query_name.startswith(self.cdn_name):
             client_ip = client_addr[0]
             best_replica = self.replica_manager.get_best_replica(client_ip)
             best_replica_ip = socket.gethostbyname(best_replica)
             answer = RR(query.q.qname, QTYPE.A, rdata=A(best_replica_ip), ttl=3600)
         else:
-            answer = RR(query.q.qname, QTYPE.A, rdata=A(root_server_ip), ttl=3600)
+            answer = RR(query.q.qname, QTYPE.A, rdata=A(ROOT_SERVICE), ttl=3600)
 
         response.add_answer(answer)
         return response
@@ -118,7 +124,7 @@ def main():
     port = int(args.port)
     cdn_name = args.name
 
-    replica_servers =[
+    replica_servers = [
         "cdn-http1.5700.network",
         "cdn-http2.5700.network",
         "cdn-http3.5700.network",
@@ -128,9 +134,12 @@ def main():
         "cdn-http7.5700.network",
     ]
 
-    replica_manager = ReplicaManager(replica_servers)
-    dns_server = DNSServer(port, cdn_name, replica_manager)
-    dns_server.run()
-
+    try:
+        replica_manager = ReplicaManager(replica_servers)
+        dns_server = DNSServer(port, cdn_name, replica_manager)
+        logging.info(f"Starting DNS server on port {port}")
+        dns_server.run()
+    except Exception as e:
+        logging.error(f"Error occurred: {e}")
 if __name__ == "__main__":
     main()
