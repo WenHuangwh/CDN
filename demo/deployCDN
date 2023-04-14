@@ -1,0 +1,47 @@
+#!/bin/bash
+
+# Usage: ./deployCDN.sh -p <port> -o <origin> -n <name> -u <username> -i <keyfile>
+dns_server="cdn-dns.5700.network"
+http_servers=(
+             "cdn-http1.5700.network"
+             "cdn-http2.5700.network" 
+             "cdn-http3.5700.network" 
+             "cdn-http4.5700.network" 
+             "cdn-http5.5700.network" 
+             "cdn-http6.5700.network" 
+             "cdn-http7.5700.network"
+             )
+
+dnsserver_file="dnsserver"
+httpserver_file="httpserver"
+weblist_file="websites.txt"
+
+while getopts ":p:o:n:u:i:" opt; do
+  case $opt in
+    p) port="$OPTARG"
+    ;;
+    o) origin="$OPTARG"
+    ;;
+    n) name="$OPTARG"
+    ;;
+    u) username="$OPTARG"
+    ;;
+    i) keyfile="$OPTARG"
+    ;;
+  esac
+done
+
+# Clear files
+ssh -i "$keyfile" "${username}@${dns_server}" "rm -f *"
+# Deploy the DNS and HTTP server code to the respective servers
+scp -i "$keyfile" ${dnsserver_file} "${username}@${dns_server}:"
+
+for http_server in "${http_servers[@]}"; do
+  # Clear the cache file on each HTTP server
+  ssh -i "$keyfile" "${username}@${http_server}" "rm -f *"
+  # Copy htter server
+  scp -i "$keyfile" ${httpserver_file} "${username}@${http_server}:"
+  # Copy website list
+  scp -i "$keyfile" "${weblist_file}" "${username}@${http_server}:${weblist_file}"
+done
+
