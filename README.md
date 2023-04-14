@@ -1,23 +1,26 @@
 # CDN
-Hight-level approach:
-1. DNS Server: The DNS server is responsible for resolving domain names to their respective IP addresses. It is implemented using Python's socket module and the dnslib library. The server listens for incoming requests, processes the queries, and sends back appropriate responses with either the IP address of the HTTP server or a root server IP address.
+High-level approach:
+    To implement a CDN based on the project requirements, we need to include the following elements: DNS redirection, a simple web server, latency or performance measurement, and a cache strategy.
 
-2. HTTP Server: The HTTP server is designed to serve content from an origin server. It is implemented using Python's socket and http.client modules. The server listens for incoming requests, retrieves content either from its cache or the origin server, and sends back the appropriate HTTP response. The cache is maintained as an OrderedDict with a size limit, and it is periodically saved to a file.
+    We decided to use the Object-Oriented Design (OOD) programming paradigm for our project. First, we deployed both the HTTP and DNS servers to all replica servers. Next, we used a socket to establish communication between the HTTP server and the DNS server, allowing us to obtain latency information from the client to the HTTP server.
 
-3. Local Test File: We use a test file called client.py to test the DNS and HTTP server implementation locally. It takes a domain name as input, resolves the IP address using the DNS server, and fetches the content from the HTTP server.
+    For caching, we employed a library called 'cache' to store the most frequently viewed content on the HTTP replica. Finally, we used the 'scamper' tool to measure the latency to a client IP address and assess the overall performance of our implementation.
 
-4. Bash Script: There are 3 Bash shell scripts to deploy, run, and stop DNS and HTTP servers remotely on specified cloud nodes. These script takes command line arguments for the port, origin server, CDN-specific name, SSH username, and the SSH key file. These scipts will operate the DNS and HTTP servers on the specific cloud nodes with the provided configuration. 
+Implementations:
+1. DNS Server: The DNS server uses DNS redirection to route clients to the best replica server for a CDN based on the latency between the client and the replica servers. It consists of a class called ReplicaManager that use a thread to periodically get the latency between the server and the client. Then select the replica with the lowest latency as the best replica. And another class called DNS server, which represents the actual DNS server that processes client queries and responds with the best replica server IP addresses. 
+
+2. HTTP Server: The HTTP server has three classes: LantencyServer, CacheManager and HTTPServer. The HTTPServer class that manages incoming HTTP requests, employs a CacheManager class to handle caching of frequently viewed content, measures latency to clients using the Scamper tool and the LatencyServer class, and retrieves content from the origin server when not found in the cache.   
+
+3. Bash Script: There are 3 Bash shell scripts to deploy, run, and stop DNS and HTTP servers remotely on specified cloud nodes. These script takes command line arguments for the port, origin server, CDN-specific name, SSH username, and the SSH key file. These scipts will operate the DNS and HTTP servers on the specific cloud nodes with the provided configuration. 
 
 Challenges:
-1. Logging in to the cloud node using the SSH key. Firstly, we needed to generate an SSH key pair and submit the public key to the system administrator to gain access to the cloud nodes. Secondly, We had to add the private key to the SSH agent on our local machine to manage the keys securely and simplify the authentication process. Finally, we had to use the correct port number and username to log in to the cloud nodes. This involved learning how to properly configure the SSH client and troubleshoot issues related to permissions and connectivity in order to establish a secure connection to the cloud nodes.
+1. 
 
-2.The second challenge we faced was understanding the entire processing logic of the client. At the beginning, we were quite confused about what the input and output of the two servers looked like, as well as how the output of the dnsserver was passed on to the httpserver. Ultimately, we decided to write a client myself to better understand the servers from the perspective of the client.
 
-3.Implementing cache management in the HTTP server, including periodical cache writing to a file and constraining the cache size to 20MB. Also, we implemented a signal handler in the HTTP server to ensure that the cache is written to a file when the server is stopped, and incorporating this into the stop script.
+1 point - A short (no more than 2 pages) report describing the design decisions you made, how your evaluated their effectiveness and what you would do with more time. Include this in the README file.
+
+Future work:
+We decided to use a cache library that stores the most frequently used or viewd content. That library is deployed in all the replicas so that the replica with the lowest latency can easily get the content the client mostly likely wants. 
+If we have more time, we may try to use popular caching algorithms like Least Recently Used (LRU) or Least Frequently Used (LFU).
 
 Collaboration:
-1. Xiaoyao implemented the DNS server, including handling queries and sending appropriate responses.
-
-2. Wen implemented the HTTP server, including the content retrival.
-
-3. We design a local test file to ensure the functionality of our DNS and HTTP servers works well both locally and in the cloud. 
