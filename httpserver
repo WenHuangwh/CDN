@@ -20,6 +20,7 @@ class LatencyServer:
     def __init__(self, port):
         self.port = port
 
+    # Start the LatencyServer, listen for incoming connections and handle them in separate threads
     def start(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.bind(("", self.port))
@@ -29,6 +30,7 @@ class LatencyServer:
             conn, addr = sock.accept()
             threading.Thread(target=self.handle_latency_request, args=(conn, addr)).start()
 
+    # Measure latency to the client using the Scamper tool and return the latency value
     def measure_latency_to_client(self, client_ip):
         result = subprocess.run(
             ["scamper", "-c", f"ping -c 1", "-i", client_ip],
@@ -43,9 +45,12 @@ class LatencyServer:
         try: 
             latency = float(line.split()[3].split('/')[1]) # Extract the latency value
         except: 
+            # a place holder value
             latency = 9999  
         return latency
 
+    # Handle incoming latency requests, measure latency to the client, 
+    # and send the latency value back
     def handle_latency_request(self, conn, addr):
         client_ip = conn.recv(1024).decode()
         latency = self.measure_latency_to_client(client_ip)
@@ -61,6 +66,7 @@ class HTTPServer:
         self.origin = origin
         self.cache_manager = CacheManager(origin)
 
+    # Start the HTTP server, listen for incoming connections, and handle the requests
     def start(self):
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.bind(("", self.port))
@@ -75,6 +81,7 @@ class HTTPServer:
             conn.sendall(response)
             conn.close()
 
+    # Handle incoming HTTP requests and return the appropriate response based on the requested path
     def handle_request(self, request):
         request_parts = request.split()
         if len(request_parts) < 2:

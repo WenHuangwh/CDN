@@ -11,7 +11,6 @@ import threading
 ROOT_SERVICE = "198.41.0.4"
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-
 class ReplicaManager:
     def __init__(self, replica_servers):
         self.replica_servers = replica_servers
@@ -19,10 +18,12 @@ class ReplicaManager:
         self.update_interval = 600  # 10 minutes in seconds
         self.start_update_thread()
 
+    # Start a thread to regularly update the client to replica map
     def start_update_thread(self):
         update_thread = threading.Thread(target=self.update_map, daemon=True)
         update_thread.start()
 
+    # Update the client to replica map by measuring latency to each replica server
     def update_map(self):
         while True:
             for client_ip in self.client_replica_map:
@@ -40,6 +41,7 @@ class ReplicaManager:
             self.save_map_cache()
             time.sleep(self.update_interval)
 
+    # Load the cached client to replica map from a file
     def load_map_cache(self):
         try:
             with open("map_cache", "r") as f:
@@ -47,10 +49,12 @@ class ReplicaManager:
         except FileNotFoundError:
             return {}
 
+    # Save the current client to replica map to a file
     def save_map_cache(self):
         with open("map_cache", "w") as f:
             json.dump(self.client_replica_map, f)
 
+    # Measure the latency between the http replica server and the client
     def measure_latency(self, server, client_ip, latency_port = 20022):
         # Connect to the HTTP server's latency measurement port
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -62,6 +66,7 @@ class ReplicaManager:
                 log_file.write(str(latency) + "\n")
             return latency
 
+    # Get the best replica for a client based on the measured latency
     def get_best_replica(self, client_ip):
         if client_ip not in self.client_replica_map:
             latencies = {}
@@ -92,6 +97,8 @@ class DNSServer:
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.sock.bind(("", self.port))
 
+    # Handle incoming DNS queries, returning the best replica IP 
+    # based on latency for CDN-specific queries
     def handle_query(self, query, client_addr):
         response = query.reply()
         qtype = QTYPE[query.q.qtype]
@@ -108,6 +115,7 @@ class DNSServer:
         response.add_answer(answer)
         return response
 
+    # Main loop for the DNS server, continuously receiving and handling DNS queries
     def run(self):
         while True:
             data, addr = self.sock.recvfrom(1024)
