@@ -37,7 +37,8 @@ for http_server in "${http_servers[@]}"; do
   ssh -i "$keyfile" "${username}@${http_server}" "./httpserver -p ${port} -o ${origin}" &
 done
 
-disown
+# Wait for all SSH commands to complete
+wait
 
 
 

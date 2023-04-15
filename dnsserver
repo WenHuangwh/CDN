@@ -13,10 +13,11 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 
 class ReplicaManager:
-    def __init__(self, replica_servers):
+    def __init__(self, replica_servers, latency_port):
         self.replica_servers = replica_servers
+        self.latency_port = latency_port
         self.client_replica_map = self.load_map_cache()
-        self.update_interval = 600  # 10 minutes in seconds
+        self.update_interval = 600  # 10 minutes
         self.start_update_thread()
 
     def start_update_thread(self):
@@ -32,7 +33,7 @@ class ReplicaManager:
                         latency = self.measure_latency(server, client_ip)
                         latencies[server] = latency
                     except Exception as e:
-                        print(f"Error measuring latency for server {server}: {e}")
+                        logging.info(f"Error measuring latency for server {server}: {e}")
                         continue
 
                 best_replica = min(latencies, key=latencies.get)
@@ -51,15 +52,14 @@ class ReplicaManager:
         with open("map_cache", "w") as f:
             json.dump(self.client_replica_map, f)
 
-    def measure_latency(self, server, client_ip, latency_port = 20022):
+    def measure_latency(self, server, client_ip):
         # Connect to the HTTP server's latency measurement port
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.connect((server, latency_port))
+            sock.connect((server, self.latency_port))
             sock.sendall(client_ip.encode())
             latency = float(sock.recv(1024).decode())
-            with open("log.txt", "a") as log_file:
-                log_file.write("latency:" + "\n")
-                log_file.write(str(latency) + "\n")
+            write_log("latency:" + "\n")
+            write_log(str(latency) + "\n")
             return latency
 
     def get_best_replica(self, client_ip):
@@ -69,17 +69,18 @@ class ReplicaManager:
                 try:
                     latency = self.measure_latency(server, client_ip)
                     latencies[server] = latency
+                    if (latency >= 9999):
+                        write_log(f"Connection failed to {server}")
                 except Exception as e:
-                    print(f"Error measuring latency for server {server}: {e}")
+                    logging.info(f"Error measuring latency for server {server}: {e}")
                     continue
 
             best_replica = min(latencies, key=latencies.get)
             self.client_replica_map[client_ip] = best_replica
             self.save_map_cache()
-            with open("log.txt", "a") as log_file:
-                log_file.write("Test map:" + "\n")
-                log_file.write(client_ip + "\n")
-                log_file.write(self.client_replica_map[client_ip] + "\n")
+            write_log("Test map:" + "\n")
+            write_log(client_ip + "\n")
+            write_log(self.client_replica_map[client_ip] + "\n")
 
         return self.client_replica_map[client_ip]
 
@@ -115,6 +116,10 @@ class DNSServer:
             response = self.handle_query(query, addr)
             self.sock.sendto(response.pack(), addr)
 
+def write_log(log_entry):
+    with open("log.txt", "a") as log_file:
+        log_file.write(log_entry + "\n")
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--port', required=True, help="Port number to bind the DNS server")
@@ -122,6 +127,7 @@ def main():
     args = parser.parse_args()
 
     port = int(args.port)
+    latency_port = int(args.port) + 2
     cdn_name = args.name
 
     replica_servers = [
@@ -135,11 +141,12 @@ def main():
     ]
 
     try:
-        replica_manager = ReplicaManager(replica_servers)
+        replica_manager = ReplicaManager(replica_servers, latency_port)
         dns_server = DNSServer(port, cdn_name, replica_manager)
         logging.info(f"Starting DNS server on port {port}")
         dns_server.run()
     except Exception as e:
         logging.error(f"Error occurred: {e}")
+
 if __name__ == "__main__":
     main()

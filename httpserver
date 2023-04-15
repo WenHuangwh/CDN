@@ -13,7 +13,42 @@ import time
 import logging
 
 CACHE_FILENAME = "cache"
+WEBSITE_LIST = "websites.txt"
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# class LatencyServer:
+
+#     def __init__(self, port):
+#         self.port = port
+
+#     def start(self):
+#         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+#         sock.bind(("", self.port))
+#         sock.listen()
+
+#         while True:
+#             conn, addr = sock.accept()
+#             threading.Thread(target=self.handle_latency_request, args=(conn, addr)).start()
+
+#     def measure_latency_to_client(self, client_ip, latency = 999999):
+#         result = subprocess.run(
+#             ["scamper", "-c", f"ping -c 1", "-i", client_ip],
+#             stdout=subprocess.PIPE,
+#             text=True
+#         )
+#         lines = result.stdout.splitlines()
+#         try: 
+#             line = lines[-1]
+#             latency = float(line.split()[3].split('/')[1]) # Extract the latency value
+#         except: 
+#             latency = 999999  
+#         return latency
+
+#     def handle_latency_request(self, conn, addr):
+#         client_ip = conn.recv(1024).decode()
+#         latency = self.measure_latency_to_client(client_ip)
+#         conn.sendall(str(latency).encode())
+
 
 class LatencyServer:
 
@@ -29,28 +64,30 @@ class LatencyServer:
             conn, addr = sock.accept()
             threading.Thread(target=self.handle_latency_request, args=(conn, addr)).start()
 
-    def measure_latency_to_client(self, client_ip):
-        result = subprocess.run(
-            ["scamper", "-c", f"ping -c 1", "-i", client_ip],
-            stdout=subprocess.PIPE,
-            text=True
-        )
-        write_log("measure latency")
-        write_log(result.stdout)
-        lines = result.stdout.splitlines()
-        line = lines[-1]
-        latency = 0
-        try: 
-            latency = float(line.split()[3].split('/')[1]) # Extract the latency value
-        except: 
-            latency = 9999  
+    def measure_latency_to_client(self, client_ip, latency = 999999):
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as scamper_sock:
+            scamper_sock.connect("/tmp/scamperctrl")
+            scamper_sock.sendall(f"ping -c 1 {client_ip}\n".encode())
+
+            data = b""
+            while True:
+                chunk = scamper_sock.recv(1024)
+                if not chunk:
+                    break
+                data += chunk
+
+            output = data.decode()
+            lines = output.splitlines()
+            try:
+                line = lines[-1]
+                latency = float(line.split()[3].split('/')[1])  # Extract the latency value
+            except:
+                latency = 999999
         return latency
 
     def handle_latency_request(self, conn, addr):
         client_ip = conn.recv(1024).decode()
         latency = self.measure_latency_to_client(client_ip)
-        write_log("latency value: ")
-        write_log(str(latency))
         conn.sendall(str(latency).encode())
 
 
@@ -65,8 +102,6 @@ class HTTPServer:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.bind(("", self.port))
         sock.listen()
-
-        print("HTTP server starts to listening")
 
         while True:
             conn, addr = sock.accept()
@@ -86,24 +121,28 @@ class HTTPServer:
             return b"HTTP/1.1 204 No Content\r\n\r\n"
         # Have records in cache
         elif self.cache_manager.is_in_cache(path):
-            write_log(f"Getting from cache: {path}")
-            return self.cache_manager.get_from_cache(path)
+            headers, content = self.cache_manager.get_from_cache(path)
+            response_bytes = bytearray()
+            response_line = "HTTP/1.1 200 OK\r\n"
+            response_bytes.extend(response_line.encode())
+
+            for header, value in headers.items():
+                header_line = f"{header}: {value}\r\n"
+                response_bytes.extend(header_line.encode())
+
+            response_bytes.extend(b"\r\n")
+            response_bytes.extend(content)
+
+            return bytes(response_bytes)
         # otherwise retrieve from origin
         # for invalid path, origin will respond with a 404
         else:
-            write_log(f"Getting from origin: {path}")
             conn = http.client.HTTPConnection(self.origin)
-            # Start the timer
-            start_time = time.time()
             # Add the Host header to the request
             headers = {"Host": self.origin}
             conn.request("GET", path, headers=headers)
 
             response = conn.getresponse()
-
-            # End the timer and calculate the time taken
-            end_time = time.time()
-            time_taken = end_time - start_time
 
             response_headers = response.getheaders()
             response_content = response.read()
@@ -118,9 +157,6 @@ class HTTPServer:
 
             response_bytes.extend(b"\r\n")
             response_bytes.extend(response_content)
-
-            # Log the time taken to get the website from the origin server
-            write_log(f"Time taken to get {path} from origin: {time_taken:.4f} seconds")
 
             return bytes(response_bytes)
 
@@ -148,7 +184,7 @@ class CacheManager:
 
     def prepare_cache(self):
         # Read the content of websites.txt
-        with open("websites.txt", "r") as file:
+        with open(WEBSITE_LIST, "r") as file:
             data = file.read()
 
         # Split the data into lines
@@ -184,12 +220,19 @@ class CacheManager:
         return path in self.cache
 
     def get_from_cache(self, path):
-        return self.cache[path]
+        content = self.cache[path]
+        headers = {
+            "Content-Type": "text/html; charset=utf-8",
+            "Content-Length": len(content),
+            "Cache-Control": "public, max-age=31536000",
+        }
+        return headers, content
 
 
-def write_log(log_entry):
-    with open("log.txt", "a") as log_file:
-        log_file.write(log_entry + "\n")
+
+# def write_log(log_entry):
+#     with open("log.txt", "a") as log_file:
+#         log_file.write(log_entry + "\n")
 
 
 def main():
@@ -199,7 +242,7 @@ def main():
     parser.add_argument('-o', '--origin', required=True, help="Origin server for the CDN")
     args = parser.parse_args()
 
-    latency_port = 20022
+    latency_port = int(args.port) + 2
 
     try:
         # Start the latency server
