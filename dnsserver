@@ -45,7 +45,7 @@ class ReplicaManager:
         Periodically update the client_replica_map with the best replica for each client.
         """
         while True:
-            for client_ip in self.client_replica_map:
+            for client_ip in list(self.client_replica_map.keys()):  # Create a copy of the dictionary keys
                 latencies = {}
                 for server in self.replica_servers:
                     try:
@@ -100,12 +100,18 @@ class ReplicaManager:
         """
         # Connect to the HTTP server's latency measurement port
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.connect((server, self.latency_port))
-            sock.sendall(client_ip.encode())
-            latency = float(sock.recv(1024).decode())
-            write_log("latency:" + "\n")
-            write_log(str(latency) + "\n")
-            return latency
+            sock.settimeout(5)  # Set a timeout of 5 seconds
+            try:
+                sock.connect((server, self.latency_port))
+                sock.sendall(client_ip.encode())
+                latency = float(sock.recv(1024).decode())
+                write_log("latency:" + "\n")
+                write_log(str(latency) + "\n")
+                return latency
+            except socket.timeout:
+                write_log(f"Timeout occurred while measuring latency between {server} and {client_ip}\n")
+                return 999999
+
 
     def get_best_replica(self, client_ip):
         """

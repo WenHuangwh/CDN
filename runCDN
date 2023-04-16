@@ -13,6 +13,7 @@ http_servers=(
              )
 dnsserver_file="dnsserver"
 httpserver_file="httpserver"
+scamper_port=$((port + 1))
 
 while getopts ":p:o:n:u:i:" opt; do
   case $opt in
@@ -34,6 +35,7 @@ ssh -i "$keyfile" "${username}@${dns_server}" "./${dnsserver_file} -p ${port} -n
 
 # Start the HTTP servers and Flask APIs
 for http_server in "${http_servers[@]}"; do
+  ssh -i "$keyfile" "${username}@${http_server}" "scamper -D -P ${scamper_port}" &
   ssh -i "$keyfile" "${username}@${http_server}" "./${httpserver_file} -p ${port} -o ${origin}" &
 done
 

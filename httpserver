@@ -9,6 +9,7 @@ import socket
 import subprocess
 import threading
 import logging
+import json
 
 CACHE_FILENAME = "cache"
 WEBSITE_LIST = "websites.txt"
@@ -18,7 +19,7 @@ class LatencyServer:
     """
     The LatencyServer uses scamper to test latency between the HTTP server and the client and sends the result back to the DNS server.
     """
-    def __init__(self, port):
+    def __init__(self, port, scamper_port):
         """
         Initialize the LatencyServer.
 
@@ -28,6 +29,7 @@ class LatencyServer:
             The port number to bind the LatencyServer.
         """
         self.port = port
+        self.scamper_port = scamper_port
 
     def start(self):
         """
@@ -55,18 +57,33 @@ class LatencyServer:
         float
             The latency value to the client.
         """
-        result = subprocess.run(
-            ["scamper", "-c", f"ping -c 1", "-i", client_ip],
-            stdout=subprocess.PIPE,
-            text=True
-        )
-        lines = result.stdout.splitlines()
-        try: 
-            line = lines[-1]
-            latency = float(line.split()[3].split('/')[1]) # Extract the latency value
-        except: 
-            latency = 999999  
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as scamper_sock:
+            # Connect to the scamper control socket
+            scamper_sock.connect(("localhost", self.scamper_port))
+
+            # Attach to the control socket and set the data format to JSON
+            scamper_sock.sendall(b"attach format json\n")
+
+            # Send a ping command to scamper
+            scamper_sock.sendall(f"ping -c 1 {client_ip}\n".encode())
+
+            # Receive the result from scamper
+            data = b""
+            data = scamper_sock.recv(4096)
+            data = scamper_sock.recv(4096)
+
+            try:
+                # Parse the JSON output
+                output = data.decode()
+                data_parts = output.split('\n')
+                json_data = data_parts[1]
+                parsed_data = json.loads(json_data)
+                latency = parsed_data['statistics']['avg']
+            except:
+                latency = 999999
+        # write_log(str(latency))
         return latency
+
 
     def handle_latency_request(self, conn, addr):
         """
@@ -303,10 +320,10 @@ class CacheManager:
         return headers, content
 
 
-
-# def write_log(log_entry):
-#     with open("log.txt", "a") as log_file:
-#         log_file.write(log_entry + "\n")
+def write_log(log_entry):
+    with open("log.txt", "a") as log_file:
+        log_file.write(log_entry)
+        log_file.write("\n")
 
 
 def main():
@@ -316,11 +333,12 @@ def main():
     parser.add_argument('-o', '--origin', required=True, help="Origin server for the CDN")
     args = parser.parse_args()
 
+    scamper_port = int(args.port) + 1
     latency_port = int(args.port) + 2
 
     try:
         # Start the latency server
-        latency_server = LatencyServer(latency_port)
+        latency_server = LatencyServer(latency_port, scamper_port)
         threading.Thread(target=latency_server.start).start()
 
         # Start the HTTP server
