@@ -1,15 +1,13 @@
 # CDN
 High-level approach:
     To implement a CDN based on the project requirements, we need to include the following elements: DNS redirection, a simple web server, latency or performance measurement, and a cache strategy.
-
     We decided to use the Object-Oriented Design (OOD) programming paradigm for our project. First, we deployed both the HTTP and DNS servers to all replica servers. Next, we used a socket to establish communication between the HTTP server and the DNS server, allowing us to obtain latency information from the client to the HTTP server.
-
     For caching, we employed a library called 'cache' to store the most frequently viewed content on the HTTP replica. Finally, we used the 'scamper' tool to measure the latency to a client IP address and assess the overall performance of our implementation.
 
 Implementations:
-1. DNS Server: The DNS server uses DNS redirection to route clients to the best replica server for a CDN based on the latency between the client and the replica servers. It consists of a class called ReplicaManager that use a thread to periodically get the latency between the server and the client. Then select the replica with the lowest latency as the best replica. And another class called DNS server, which represents the actual DNS server that processes client queries and responds with the best replica server IP addresses. 
+1. DNS Server: The DNS server is implemented using the dnspython library. It uses DNS redirection to route clients to the best replica server for a CDN based on the latency between the client and the replica servers. It consists of a class called ReplicaManager that use a thread to periodically get the latency between the server and the client. Then select the replica with the lowest latency as the best replica based on the client's IP address. And another class called DNS server, which represents the actual DNS server that processes client queries and responds with the best replica server IP addresses. 
 
-2. HTTP Server: The HTTP server comprises three classes: LatencyServer, CacheManager, and HTTPServer. The HTTPServer class manages incoming HTTP requests, utilizes the CacheManager class to handle caching of frequently viewed content, measures latency to clients using the Scamper tool and the LatencyServer class, and fetches content from the origin server when it's not available in the cache. The cache libray cache is built in CacheManager based on the avilable distribution file that lists the most frequently viewed pages. 
+2. HTTP Server: The HTTP server is implemented using Python's built-in http.server module. It comprises three classes: LatencyServer, CacheManager, and HTTPServer. The HTTPServer class manages incoming HTTP requests, utilizes the CacheManager class to handle caching of frequently viewed content, measures latency to clients using the Scamper tool and the LatencyServer class, and fetches content from the origin server when it's not available in the cache. The cache libray cache is built in CacheManager based on the avilable distribution file that lists the most frequently viewed pages. 
 
 3. Bash Script: There are 3 Bash shell scripts to deploy, run, and stop DNS and HTTP servers remotely on specified cloud nodes. These script takes command line arguments for the port, origin server, CDN-specific name, SSH username, and the SSH key file. These scipts will operate the DNS and HTTP servers on the specific cloud nodes with the provided configuration. 
 
