@@ -30,7 +30,7 @@ class ReplicaManager:
         self.replica_servers = replica_servers
         self.latency_port = latency_port
         self.client_replica_map = self.load_map_cache()
-        self.update_interval = 1800  # 30 minutes
+        self.update_interval = 60  # 1 minutes
         self.start_update_thread()
 
     def start_update_thread(self):
@@ -121,6 +121,7 @@ class ReplicaManager:
         str
             The best replica server address.
         """
+        # Check if the client IP is already in the map
         if client_ip not in self.client_replica_map:
             latencies = {}
             for server in self.replica_servers:
@@ -133,14 +134,16 @@ class ReplicaManager:
                     logging.info(f"Error measuring latency for server {server}: {e}")
                     continue
 
-            best_replica = min(latencies, key=latencies.get)
-            self.client_replica_map[client_ip] = best_replica
-            self.save_map_cache()
-            write_log("Test map:" + "\n")
-            write_log(client_ip + "\n")
-            write_log(self.client_replica_map[client_ip] + "\n")
+            # If there are latency measurements, find the best replica
+            if latencies:
+                best_replica = min(latencies, key=latencies.get)
+                self.client_replica_map[client_ip] = best_replica
+            else:
+                # Set the default server if no latency measurements were successful
+                self.client_replica_map[client_ip] = self.replica_servers[0]
 
         return self.client_replica_map[client_ip]
+
 
 
 class DNSServer:
@@ -201,7 +204,6 @@ class DNSServer:
     def run(self):
         """
         Start the DNSServer and handle incoming DNS queries.
-
         """
         while True:
             data, addr = self.sock.recvfrom(1024)
