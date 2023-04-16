@@ -105,11 +105,8 @@ class ReplicaManager:
                 sock.connect((server, self.latency_port))
                 sock.sendall(client_ip.encode())
                 latency = float(sock.recv(1024).decode())
-                write_log("latency:" + "\n")
-                write_log(str(latency) + "\n")
                 return latency
             except socket.timeout:
-                write_log(f"Timeout occurred while measuring latency between {server} and {client_ip}\n")
                 return 999999
 
 
@@ -134,8 +131,6 @@ class ReplicaManager:
                 try:
                     latency = self.measure_latency(server, client_ip)
                     latencies[server] = latency
-                    if (latency >= 9999):
-                        write_log(f"Connection failed to {server}")
                 except Exception as e:
                     logging.info(f"Error measuring latency for server {server}: {e}")
                     continue
@@ -217,9 +212,9 @@ class DNSServer:
             response = self.handle_query(query, addr)
             self.sock.sendto(response.pack(), addr)
 
-def write_log(log_entry):
-    with open("log.txt", "a") as log_file:
-        log_file.write(log_entry + "\n")
+# def write_log(log_entry):
+#     with open("log.txt", "a") as log_file:
+#         log_file.write(log_entry + "\n")
 
 def main():
     parser = argparse.ArgumentParser()
