@@ -2,14 +2,15 @@
 import argparse
 import socket
 from dnslib import DNSRecord, DNSHeader, QTYPE, A, RR
-import subprocess
 import logging
 import time
 import json
 import threading
+from threading import Lock
 
 ROOT_SERVICE = "198.41.0.4"
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
 
 class ReplicaManager:
     """
@@ -31,6 +32,7 @@ class ReplicaManager:
         self.latency_port = latency_port
         self.client_replica_map = self.load_map_cache()
         self.update_interval = 1800  # 30 minutes
+        self.lock = Lock()
         self.start_update_thread()
 
     def start_update_thread(self):
@@ -45,18 +47,19 @@ class ReplicaManager:
         Periodically update the client_replica_map with the best replica for each client.
         """
         while True:
-            for client_ip in self.client_replica_map:
-                latencies = {}
-                for server in self.replica_servers:
-                    try:
-                        latency = self.measure_latency(server, client_ip)
-                        latencies[server] = latency
-                    except Exception as e:
-                        logging.info(f"Error measuring latency for server {server}: {e}")
-                        continue
+            with self.lock:  # Locking the map during the update
+                for client_ip in self.client_replica_map:
+                    latencies = {}
+                    for server in self.replica_servers:
+                        try:
+                            latency = self.measure_latency(server, client_ip)
+                            latencies[server] = latency
+                        except Exception as e:
+                            logging.info(f"Error measuring latency for server {server}: {e}")
+                            continue
 
-                best_replica = min(latencies, key=latencies.get)
-                self.client_replica_map[client_ip] = best_replica
+                    best_replica = min(latencies, key=latencies.get)
+                    self.client_replica_map[client_ip] = best_replica
             self.save_map_cache()
             time.sleep(self.update_interval)
 
@@ -98,13 +101,10 @@ class ReplicaManager:
         float
             The measured latency.
         """
-        # Connect to the HTTP server's latency measurement port
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.connect((server, self.latency_port))
             sock.sendall(client_ip.encode())
             latency = float(sock.recv(1024).decode())
-            write_log("latency:" + "\n")
-            write_log(str(latency) + "\n")
             return latency
 
     def get_best_replica(self, client_ip):
@@ -121,26 +121,22 @@ class ReplicaManager:
         str
             The best replica server address.
         """
-        if client_ip not in self.client_replica_map:
-            latencies = {}
-            for server in self.replica_servers:
-                try:
-                    latency = self.measure_latency(server, client_ip)
-                    latencies[server] = latency
-                    if (latency >= 9999):
-                        write_log(f"Connection failed to {server}")
-                except Exception as e:
-                    logging.info(f"Error measuring latency for server {server}: {e}")
-                    continue
+        with self.lock:  # Locking the map during access and modification
+            if client_ip not in self.client_replica_map:
+                latencies = {}
+                for server in self.replica_servers:
+                    try:
+                        latency = self.measure_latency(server, client_ip)
+                        latencies[server] = latency
+                    except Exception as e:
+                        logging.info(f"Error measuring latency for server {server}: {e}")
+                        continue
 
-            best_replica = min(latencies, key=latencies.get)
-            self.client_replica_map[client_ip] = best_replica
-            self.save_map_cache()
-            write_log("Test map:" + "\n")
-            write_log(client_ip + "\n")
-            write_log(self.client_replica_map[client_ip] + "\n")
+                best_replica = min(latencies, key=latencies.get)
+                self.client_replica_map[client_ip] = best_replica
+                self.save_map_cache()
 
-        return self.client_replica_map[client_ip]
+            return self.client_replica_map[client_ip]
 
 
 class DNSServer:
@@ -186,18 +182,13 @@ class DNSServer:
         response = query.reply()
         qtype = QTYPE[query.q.qtype]
         query_name = str(query.q.qname).rstrip('.')
-        
+
         if qtype == "A" and query_name.startswith(self.cdn_name):
             client_ip = client_addr[0]
             best_replica = self.replica_manager.get_best_replica(client_ip)
-            best_replica_ip = socket.gethostbyname(best_replica)
-            answer = RR(query.q.qname, QTYPE.A, rdata=A(best_replica_ip), ttl=3600)
-        else:
-            answer = RR(query.q.qname, QTYPE.A, rdata=A(ROOT_SERVICE), ttl=3600)
+            response.add_answer(RR(query_name, QTYPE.A, rdata=A(best_replica), ttl=60))
 
-        response.add_answer(answer)
         return response
-
     def run(self):
         """
         Start the DNSServer and handle incoming DNS queries.
@@ -209,11 +200,10 @@ class DNSServer:
             response = self.handle_query(query, addr)
             self.sock.sendto(response.pack(), addr)
 
-def write_log(log_entry):
-    with open("log.txt", "a") as log_file:
-        log_file.write(log_entry + "\n")
-
 def main():
+    """
+    The main function sets up and starts the DNSServer with the provided arguments.
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument('-p', '--port', required=True, help="Port number to bind the DNS server")
     parser.add_argument('-n', '--name', required=True, help="CDN-specific name that your server translates to an IP")

@@ -31,11 +31,11 @@ while getopts ":p:o:n:u:i:" opt; do
 done
 
 # Stop the DNS server
-ssh -i "$keyfile" "${username}@${dns_server}" "pkill -f 'dnsserver -p ${port} -n ${name}'" &
+ssh -i "$keyfile" "${username}@${dns_server}" "pkill -f '${dnsserver_file} -p ${port} -n ${name}'" &
 
 # Stop the HTTP servers
 for http_server in "${http_servers[@]}"; do
-  ssh -i "$keyfile" "${username}@${http_server}" "pkill -f 'httpserver -p ${port} -o ${origin}'" &
+  ssh -i "$keyfile" "${username}@${http_server}" "pkill -f '${httpserver_file} -p ${port} -o ${origin}'" &
 done
 
 # Wait for all SSH commands to complete

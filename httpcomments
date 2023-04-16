@@ -16,7 +16,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 class LatencyServer:
     """
-    The LatencyServer uses scamper to test latency between the HTTP server and the client and sends the result back to the DNS server.
+    The LatencyServer use scamper to test latency between httpserver with client and send back to dnsserver.
     """
     def __init__(self, port):
         """
@@ -84,9 +84,6 @@ class LatencyServer:
         conn.sendall(str(latency).encode())
 
 class HTTPServer:
-    """
-    The HTTPServer class represents an HTTP server responsible for handling client requests, serving cached content, and fetching content from the origin server.
-    """
     def __init__(self, port, origin):
         """
         Initialize the HTTPServer.
@@ -180,10 +177,9 @@ class HTTPServer:
 
             return bytes(response_bytes)
 
-
 class CacheManager:
     """
-    The CacheManager class is responsible for managing the cache for the HTTP server. It stores the cached content, checks if a path is in the cache, and retrieves content from the cache.
+    The CacheManager responsible for create cache.
     """
     def __init__(self, origin, max_cache_size=20 * 1024 * 1024):
         """
@@ -303,12 +299,6 @@ class CacheManager:
         return headers, content
 
 
-
-# def write_log(log_entry):
-#     with open("log.txt", "a") as log_file:
-#         log_file.write(log_entry + "\n")
-
-
 def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser()
@@ -333,3 +323,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

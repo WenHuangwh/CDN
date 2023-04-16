@@ -30,15 +30,14 @@ while getopts ":p:o:n:u:i:" opt; do
 done
 
 # Start the DNS server
-ssh -i "$keyfile" "${username}@${dns_server}" "./dnsserver -p ${port} -n ${name}" &
+ssh -i "$keyfile" "${username}@${dns_server}" "./${dnsserver_file} -p ${port} -n ${name}" &
 
 # Start the HTTP servers and Flask APIs
 for http_server in "${http_servers[@]}"; do
-  ssh -i "$keyfile" "${username}@${http_server}" "./httpserver -p ${port} -o ${origin}" &
+  ssh -i "$keyfile" "${username}@${http_server}" "./${httpserver_file} -p ${port} -o ${origin}" &
 done
 
 # Wait for all SSH commands to complete
 wait
-
 
 
