@@ -1,16 +1,16 @@
-## Project 5: Roll Your Own CDN
-# High-level approach:
+# Project 5: Roll Your Own CDN
+## High-level approach:
 
-# Cache strategy: 
+### Cache strategy: 
 We considered two strategies: a) latency-based, in which we store the most frequently accessed content statically and the DNS server distributes HTTP servers based on latency, and b) content-based, in which the DNS server checks if any HTTP server has the requested content in cache before distributing. After testing both strategies, we found that latency had a greater impact on total time, so we implemented a latency-based strategy.
 
-# DNS-server: 
+### DNS-server: 
 When a client reaches the DNS server, it checks if it has a record of the best HTTP server for this client. If not, the DNS server connects with each HTTP server to measure latency and stores the server with the lowest latency. All client-server mappings are stored in a cache, which the DNS server updates periodically.
 
-# HTTP-server: 
+### HTTP-server: 
 Each time an HTTP server is run, it uses a websites.txt file containing website distribution information to build its content cache, which remains static. The HTTP server uses the Scamper daemon to measure latency to clients. The daemon runs in the background and is connected via a socket.
     
-# Implementations:
+### Implementations:
 
 DNS Server: Implemented using the dnspython library, the DNS server uses DNS redirection to route clients to the best replica server based on latency. It includes a ReplicaManager class that periodically measures latency between servers and clients, and a DNSServer class, which processes client queries and responds with the best replica server IP address.
 
