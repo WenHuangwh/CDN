@@ -1,0 +1,44 @@
+#!/bin/bash
+
+# Usage: ./stopCDN.sh -p <port> -o <origin> -n <name> -u <username> -i <keyfile>
+dns_server="cdn-dns.5700.network"
+http_servers=(
+             "cdn-http1.5700.network"
+             "cdn-http2.5700.network" 
+             "cdn-http3.5700.network" 
+             "cdn-http4.5700.network" 
+             "cdn-http5.5700.network" 
+             "cdn-http6.5700.network" 
+             "cdn-http7.5700.network"
+             )
+
+dnsserver_file="dnsserver"
+httpserver_file="httpserver"
+scamper_port=$((port + 1))
+
+while getopts ":p:o:n:u:i:" opt; do
+  case $opt in
+    p) port="$OPTARG"
+    ;;
+    o) origin="$OPTARG"
+    ;;
+    n) name="$OPTARG"
+    ;;
+    u) username="$OPTARG"
+    ;;
+    i) keyfile="$OPTARG"
+    ;;
+  esac
+done
+
+# Stop the DNS server
+ssh -i "$keyfile" "${username}@${dns_server}" "pkill -f '${dnsserver_file} -p ${port} -n ${name}'" &
+
+# Stop the HTTP servers and the scamper processes
+for http_server in "${http_servers[@]}"; do
+  ssh -i "$keyfile" "${username}@${http_server}" "pkill -f '${httpserver_file} -p ${port} -o ${origin}'" &
+  ssh -i "$keyfile" "${username}@${http_server}" "pkill -f 'scamper -D -P ${scamper_port}'" &
+done
+
+# Wait for all SSH commands to complete
+wait
